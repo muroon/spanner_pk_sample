@@ -8,41 +8,41 @@ import (
 	"github.com/bwmarrin/snowflake"
 )
 
-type creator interface {
-	writeDML(
+type stmtGenerator interface {
+	getStatement(
 		ctx context.Context, client *spanner.Client, firstName, lastName string,
-	) (int64, error)
+	) (spanner.Statement, error)
 }
 
-var creators map[Mode]creator
+var stmtGenerators map[Mode]stmtGenerator
 
 func init() {
-	creators = map[Mode]creator{
-		ModeFarmFingerPrintConcat: new(creatorFarmFingerPrintConcat),
-		ModeFarmFingerPrintRand:   new(creatorFarmFingerPrintRand),
-		ModeRandNum:               new(creatorRandNum),
-		ModeRandNum2:              new(creatorRandNum2),
-		ModeTimestampRandNum:      new(creatorTimestampRandNum),
-		ModeTimestampRandNum2:     new(creatorTimestampRandNum2),
-		ModeRandNumTimestamp:      new(creatorRandNumTimestamp),
+	stmtGenerators = map[Mode]stmtGenerator{
+		ModeFarmFingerPrintConcat: new(stmtGeneratorFarmFingerPrintConcat),
+		ModeFarmFingerPrintRand:   new(stmtGeneratorFarmFingerPrintRand),
+		ModeRandNum:               new(stmtGeneratorRandNum),
+		ModeRandNum2:              new(stmtGeneratorRandNum2),
+		ModeTimestampRandNum:      new(stmtGeneratorTimestampRandNum),
+		ModeTimestampRandNum2:     new(stmtGeneratorTimestampRandNum2),
+		ModeRandNumTimestamp:      new(stmtGeneratorRandNumTimestamp),
 	}
 }
 
-func provideCreator(md Mode) creator {
-	return creators[md]
+func provideStmtGenerator(md Mode) stmtGenerator {
+	return stmtGenerators[md]
 }
 
-type creatorFarmFingerPrintConcat struct{}
-type creatorFarmFingerPrintRand struct{}
-type creatorRandNum struct{}
-type creatorRandNum2 struct{}
-type creatorTimestampRandNum struct{}
-type creatorTimestampRandNum2 struct{}
-type creatorRandNumTimestamp struct{}
+type stmtGeneratorFarmFingerPrintConcat struct{}
+type stmtGeneratorFarmFingerPrintRand struct{}
+type stmtGeneratorRandNum struct{}
+type stmtGeneratorRandNum2 struct{}
+type stmtGeneratorTimestampRandNum struct{}
+type stmtGeneratorTimestampRandNum2 struct{}
+type stmtGeneratorRandNumTimestamp struct{}
 
-func (cr creatorFarmFingerPrintConcat) writeDML(
+func (cr stmtGeneratorFarmFingerPrintConcat) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	stmt := spanner.Statement{
 		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
 					(FARM_FINGERPRINT(CONCAT(@firstName, @lastName)), @firstName, @lastName)`,
@@ -52,12 +52,12 @@ func (cr creatorFarmFingerPrintConcat) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorFarmFingerPrintRand) writeDML(
+func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	key := getRandomString(20)
 
 	stmt := spanner.Statement{
@@ -70,12 +70,12 @@ func (cr creatorFarmFingerPrintRand) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorRandNum) writeDML(
+func (cr stmtGeneratorRandNum) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	key := getRandomInt64(0)
 
 	stmt := spanner.Statement{
@@ -88,12 +88,12 @@ func (cr creatorRandNum) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorRandNum2) writeDML(
+func (cr stmtGeneratorRandNum2) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	key := getIncrementNum()
 	key = key ^ (key << 13)
 	key = key ^ (key >> 7)
@@ -109,12 +109,12 @@ func (cr creatorRandNum2) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorTimestampRandNum) writeDML(
+func (cr stmtGeneratorTimestampRandNum) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	tm := time.Now().Unix()
 	tm = tm << 32
 	num := int64(getRandomUint32())
@@ -130,22 +130,24 @@ func (cr creatorTimestampRandNum) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorTimestampRandNum2) writeDML(
+func (cr stmtGeneratorTimestampRandNum2) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
+	stmt := spanner.Statement{}
+
 	// timestampが上位ビットのHashライブラリ
 	node, err := snowflake.NewNode(getIncrementNum())
 	if err != nil {
-		return 0, err
+		return stmt, err
 	}
 
 	id := node.Generate()
 	key := id.Int64()
 
-	stmt := spanner.Statement{
+	stmt = spanner.Statement{
 		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
 					(@key, @firstName, @lastName)`,
 		Params: map[string]interface{}{
@@ -155,12 +157,12 @@ func (cr creatorTimestampRandNum2) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }
 
-func (cr creatorRandNumTimestamp) writeDML(
+func (cr stmtGeneratorRandNumTimestamp) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
-) (int64, error) {
+) (spanner.Statement, error) {
 	tm := time.Now().Unix()
 	num := int64(getRandomUint32()) << 32
 	key := num + tm
@@ -175,5 +177,5 @@ func (cr creatorRandNumTimestamp) writeDML(
 		},
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return stmt, nil
 }

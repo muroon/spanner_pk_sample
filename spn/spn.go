@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"time"
 
 	crand "crypto/rand"
 
@@ -42,6 +43,19 @@ const (
 	ModeRandNumTimestamp = "random_num_timestamp"
 )
 
+type TestMode string
+
+const (
+	// TestModeSingle single insert
+	TestModeSingle TestMode = "single"
+
+	// TestModeBatch batch insert
+	TestModeBatch = "batch"
+
+	// TestModeBatchOnly test time only batch execution
+	TestModeBatchOnly = "batch_only"
+)
+
 // DefaultNumber insert Number
 const DefaultNumber int = 10
 
@@ -63,7 +77,9 @@ func init() {
 }
 
 // ExecuteInsert insert execute
-func ExecuteInsert(ctx context.Context, md Mode, num int) error {
+func ExecuteInsert(
+	ctx context.Context, md Mode, tmd TestMode, num int, delete bool,
+) error {
 	if _, ok := modes[md]; !ok {
 		return errors.New("invalid parameter.")
 	}
@@ -83,17 +99,109 @@ func ExecuteInsert(ctx context.Context, md Mode, num int) error {
 	}
 	defer client.Close()
 
-	cr := provideCreator(md)
+	sgr := provideStmtGenerator(md)
+
+	switch tmd {
+	case TestModeSingle:
+		err = testSingle(ctx, client, sgr, num)
+	case TestModeBatch:
+		err = testBatch(ctx, client, sgr, num)
+	case TestModeBatchOnly:
+		err = testBatchOnly(ctx, client, sgr, num)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if delete {
+		_, err = deleteAll(ctx, client)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func testSingle(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+	startTime := time.Now().UnixNano()
 
 	for i := 0; i < num; i++ {
 		incrementNum = int64(i) + 1
 
-		_, err = cr.writeDML(ctx, client, getRandomString(10), getRandomString(10))
+		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		if err != nil {
+			return err
+		}
+
+		_, err = writeUsingDML(ctx, client, stmt)
 
 		if err != nil {
 			return err
 		}
 	}
+
+	endTime := time.Now().UnixNano()
+
+	fmt.Printf("term num:%d nanotime:%d\n", num, endTime-startTime)
+
+	return nil
+}
+
+func testBatch(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+	startTime := time.Now().UnixNano()
+
+	stmts := make([]spanner.Statement, 0, num)
+
+	for i := 0; i < num; i++ {
+		incrementNum = int64(i) + 1
+
+		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		if err != nil {
+			return err
+		}
+
+		stmts = append(stmts, stmt)
+	}
+
+	err := writeUsingDMLBatch(ctx, client, stmts)
+	if err != nil {
+		return err
+	}
+
+	endTime := time.Now().UnixNano()
+
+	fmt.Printf("term num:%d nanotime:%d\n", num, endTime-startTime)
+
+	return nil
+}
+
+func testBatchOnly(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+
+	stmts := make([]spanner.Statement, 0, num)
+
+	for i := 0; i < num; i++ {
+		incrementNum = int64(i) + 1
+
+		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		if err != nil {
+			return err
+		}
+
+		stmts = append(stmts, stmt)
+	}
+
+	startTime := time.Now().UnixNano()
+
+	err := writeUsingDMLBatch(ctx, client, stmts)
+	if err != nil {
+		return err
+	}
+
+	endTime := time.Now().UnixNano()
+
+	fmt.Printf("term num:%d nanotime:%d\n", num, endTime-startTime)
 
 	return nil
 }
@@ -111,6 +219,27 @@ func writeUsingDML(ctx context.Context, client *spanner.Client, stmt spanner.Sta
 		return err
 	})
 	return rowCount, err
+}
+
+func writeUsingDMLBatch(ctx context.Context, client *spanner.Client, stmts []spanner.Statement) error {
+	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+
+		_, err := txn.BatchUpdate(ctx, stmts)
+		if err != nil {
+			return err
+		}
+
+		return err
+	})
+	return err
+}
+
+func deleteAll(ctx context.Context, client *spanner.Client) (int64, error) {
+	stmt := spanner.Statement{
+		SQL: `DELETE FROM Singers WHERE SingerId <> 0`,
+	}
+
+	return writeUsingDML(ctx, client, stmt)
 }
 
 func getRandomString(num int) string {
