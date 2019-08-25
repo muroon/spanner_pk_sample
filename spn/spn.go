@@ -14,6 +14,7 @@ import (
 	crand "crypto/rand"
 
 	"cloud.google.com/go/spanner"
+	"github.com/google/uuid"
 	"github.com/najeira/randstr"
 )
 
@@ -24,8 +25,14 @@ const (
 	// ModeFarmFingerPrintConcat farm_fingerprint mode
 	ModeFarmFingerPrintConcat Mode = "farm_fingerprint_concat"
 
+	// ModeFarmFingerPrintSingleCol farm_fingerprint_single_col
+	ModeFarmFingerPrintSingleCol Mode = "farm_fingerprint_single_col"
+
 	// ModeFarmFingerPrintRand farm_fingerprint_rand mode
 	ModeFarmFingerPrintRand = "farm_fingerprint_random"
+
+	// ModeFarmFingerPrintUUIDv4 farm_fingerprint_uuidv4
+	ModeFarmFingerPrintUUIDv4 = "farm_fingerprint_uuidv4"
 
 	// ModeRandNum random number mode
 	ModeRandNum = "random_num"
@@ -43,6 +50,7 @@ const (
 	ModeRandNumTimestamp = "random_num_timestamp"
 )
 
+// TestMode test mode type
 type TestMode string
 
 const (
@@ -66,13 +74,15 @@ var incrementNum int64
 
 func init() {
 	modes = map[Mode]int{
-		ModeFarmFingerPrintConcat: 1,
-		ModeFarmFingerPrintRand:   1,
-		ModeRandNum:               1,
-		ModeRandNum2:              1,
-		ModeTimestampRandNum:      1,
-		ModeTimestampRandNum2:     1,
-		ModeRandNumTimestamp:      1,
+		ModeFarmFingerPrintConcat:    1,
+		ModeFarmFingerPrintSingleCol: 1,
+		ModeFarmFingerPrintRand:      1,
+		ModeFarmFingerPrintUUIDv4:    1,
+		ModeRandNum:                  1,
+		ModeRandNum2:                 1,
+		ModeTimestampRandNum:         1,
+		ModeTimestampRandNum2:        1,
+		ModeRandNumTimestamp:         1,
 	}
 }
 
@@ -244,6 +254,15 @@ func deleteAll(ctx context.Context, client *spanner.Client) (int64, error) {
 
 func getRandomString(num int) string {
 	return randstr.CryptoString(num)
+}
+
+func getUUIDv4() (string, error) {
+	u4, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+
+	return u4.String(), nil
 }
 
 func getRandomInt64(maxNum int64) int64 {

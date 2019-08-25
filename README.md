@@ -5,7 +5,7 @@ query throughput of Cloud Spanner.
 - 1 node in 1 region
 - all query are executed in one transaction.
 
-![QueryThrouput](https://user-images.githubusercontent.com/301822/63349312-1b2dae00-c396-11e9-82d3-8e19646599ef.png)
+![QueryThrouput](https://user-images.githubusercontent.com/301822/63657505-dfec0e80-c7dd-11e9-87ce-96457ed850c2.png)
 
 
 ## Example (Cloud Functions)

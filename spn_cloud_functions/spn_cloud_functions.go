@@ -17,6 +17,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/bwmarrin/snowflake"
+	"github.com/google/uuid"
 	"github.com/najeira/randstr"
 )
 
@@ -27,8 +28,14 @@ const (
 	// ModeFarmFingerPrintConcat farm_fingerprint mode
 	ModeFarmFingerPrintConcat Mode = "farm_fingerprint_concat"
 
+	// ModeFarmFingerPrintSingleCol farm_fingerprint_single_col
+	ModeFarmFingerPrintSingleCol Mode = "farm_fingerprint_single_col"
+
 	// ModeFarmFingerPrintRand farm_fingerprint_rand mode
 	ModeFarmFingerPrintRand = "farm_fingerprint_random"
+
+	// ModeFarmFingerPrintUUIDv4 farm_fingerprint_uuidv4
+	ModeFarmFingerPrintUUIDv4 = "farm_fingerprint_uuidv4"
 
 	// ModeRandNum random number mode
 	ModeRandNum = "random_num"
@@ -46,6 +53,7 @@ const (
 	ModeRandNumTimestamp = "random_num_timestamp"
 )
 
+// TestMode test mode type
 type TestMode string
 
 const (
@@ -280,6 +288,15 @@ func getRandomString(num int) string {
 	return randstr.CryptoString(num)
 }
 
+func getUUIDv4() (string, error) {
+	u4, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+
+	return u4.String(), nil
+}
+
 func getRandomInt64(maxNum int64) int64 {
 	seed, _ := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 	rand.Seed(seed.Int64())
@@ -309,13 +326,15 @@ var stmtGenerators map[Mode]stmtGenerator
 
 func init() {
 	stmtGenerators = map[Mode]stmtGenerator{
-		ModeFarmFingerPrintConcat: new(stmtGeneratorFarmFingerPrintConcat),
-		ModeFarmFingerPrintRand:   new(stmtGeneratorFarmFingerPrintRand),
-		ModeRandNum:               new(stmtGeneratorRandNum),
-		ModeRandNum2:              new(stmtGeneratorRandNum2),
-		ModeTimestampRandNum:      new(stmtGeneratorTimestampRandNum),
-		ModeTimestampRandNum2:     new(stmtGeneratorTimestampRandNum2),
-		ModeRandNumTimestamp:      new(stmtGeneratorRandNumTimestamp),
+		ModeFarmFingerPrintConcat:    new(stmtGeneratorFarmFingerPrintConcat),
+		ModeFarmFingerPrintSingleCol: new(stmtGeneratorFarmFingerPrintSingleCol),
+		ModeFarmFingerPrintRand:      new(stmtGeneratorFarmFingerPrintRand),
+		ModeFarmFingerPrintUUIDv4:    new(stmtGeneratorFarmFingerPrintUUIDv4),
+		ModeRandNum:                  new(stmtGeneratorRandNum),
+		ModeRandNum2:                 new(stmtGeneratorRandNum2),
+		ModeTimestampRandNum:         new(stmtGeneratorTimestampRandNum),
+		ModeTimestampRandNum2:        new(stmtGeneratorTimestampRandNum2),
+		ModeRandNumTimestamp:         new(stmtGeneratorRandNumTimestamp),
 	}
 }
 
@@ -324,7 +343,9 @@ func provideStmtGenerator(md Mode) stmtGenerator {
 }
 
 type stmtGeneratorFarmFingerPrintConcat struct{}
+type stmtGeneratorFarmFingerPrintSingleCol struct{}
 type stmtGeneratorFarmFingerPrintRand struct{}
+type stmtGeneratorFarmFingerPrintUUIDv4 struct{}
 type stmtGeneratorRandNum struct{}
 type stmtGeneratorRandNum2 struct{}
 type stmtGeneratorTimestampRandNum struct{}
@@ -346,6 +367,21 @@ func (cr stmtGeneratorFarmFingerPrintConcat) getStatement(
 	return stmt, nil
 }
 
+func (cr stmtGeneratorFarmFingerPrintSingleCol) getStatement(
+	ctx context.Context, client *spanner.Client, firstName, lastName string,
+) (spanner.Statement, error) {
+	stmt := spanner.Statement{
+		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
+					(FARM_FINGERPRINT(@firstName), @firstName, @lastName)`,
+		Params: map[string]interface{}{
+			"firstName": firstName,
+			"lastName":  lastName,
+		},
+	}
+
+	return stmt, nil
+}
+
 func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
 ) (spanner.Statement, error) {
@@ -356,6 +392,29 @@ func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 					(FARM_FINGERPRINT(@key), @firstName, @lastName)`,
 		Params: map[string]interface{}{
 			"key":       key,
+			"firstName": firstName,
+			"lastName":  lastName,
+		},
+	}
+
+	return stmt, nil
+}
+
+func (cr stmtGeneratorFarmFingerPrintUUIDv4) getStatement(
+	ctx context.Context, client *spanner.Client, firstName, lastName string,
+) (spanner.Statement, error) {
+	stmt := spanner.Statement{}
+
+	uuid, err := getUUIDv4()
+	if err != nil {
+		return stmt, err
+	}
+
+	stmt = spanner.Statement{
+		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
+					(FARM_FINGERPRINT(@uuid), @firstName, @lastName)`,
+		Params: map[string]interface{}{
+			"uuid":      uuid,
 			"firstName": firstName,
 			"lastName":  lastName,
 		},

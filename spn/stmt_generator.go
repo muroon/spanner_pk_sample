@@ -18,13 +18,15 @@ var stmtGenerators map[Mode]stmtGenerator
 
 func init() {
 	stmtGenerators = map[Mode]stmtGenerator{
-		ModeFarmFingerPrintConcat: new(stmtGeneratorFarmFingerPrintConcat),
-		ModeFarmFingerPrintRand:   new(stmtGeneratorFarmFingerPrintRand),
-		ModeRandNum:               new(stmtGeneratorRandNum),
-		ModeRandNum2:              new(stmtGeneratorRandNum2),
-		ModeTimestampRandNum:      new(stmtGeneratorTimestampRandNum),
-		ModeTimestampRandNum2:     new(stmtGeneratorTimestampRandNum2),
-		ModeRandNumTimestamp:      new(stmtGeneratorRandNumTimestamp),
+		ModeFarmFingerPrintConcat:    new(stmtGeneratorFarmFingerPrintConcat),
+		ModeFarmFingerPrintSingleCol: new(stmtGeneratorFarmFingerPrintSingleCol),
+		ModeFarmFingerPrintRand:      new(stmtGeneratorFarmFingerPrintRand),
+		ModeFarmFingerPrintUUIDv4:    new(stmtGeneratorFarmFingerPrintUUIDv4),
+		ModeRandNum:                  new(stmtGeneratorRandNum),
+		ModeRandNum2:                 new(stmtGeneratorRandNum2),
+		ModeTimestampRandNum:         new(stmtGeneratorTimestampRandNum),
+		ModeTimestampRandNum2:        new(stmtGeneratorTimestampRandNum2),
+		ModeRandNumTimestamp:         new(stmtGeneratorRandNumTimestamp),
 	}
 }
 
@@ -33,7 +35,9 @@ func provideStmtGenerator(md Mode) stmtGenerator {
 }
 
 type stmtGeneratorFarmFingerPrintConcat struct{}
+type stmtGeneratorFarmFingerPrintSingleCol struct{}
 type stmtGeneratorFarmFingerPrintRand struct{}
+type stmtGeneratorFarmFingerPrintUUIDv4 struct{}
 type stmtGeneratorRandNum struct{}
 type stmtGeneratorRandNum2 struct{}
 type stmtGeneratorTimestampRandNum struct{}
@@ -55,6 +59,21 @@ func (cr stmtGeneratorFarmFingerPrintConcat) getStatement(
 	return stmt, nil
 }
 
+func (cr stmtGeneratorFarmFingerPrintSingleCol) getStatement(
+	ctx context.Context, client *spanner.Client, firstName, lastName string,
+) (spanner.Statement, error) {
+	stmt := spanner.Statement{
+		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
+					(FARM_FINGERPRINT(@firstName), @firstName, @lastName)`,
+		Params: map[string]interface{}{
+			"firstName": firstName,
+			"lastName":  lastName,
+		},
+	}
+
+	return stmt, nil
+}
+
 func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 	ctx context.Context, client *spanner.Client, firstName, lastName string,
 ) (spanner.Statement, error) {
@@ -65,6 +84,29 @@ func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 					(FARM_FINGERPRINT(@key), @firstName, @lastName)`,
 		Params: map[string]interface{}{
 			"key":       key,
+			"firstName": firstName,
+			"lastName":  lastName,
+		},
+	}
+
+	return stmt, nil
+}
+
+func (cr stmtGeneratorFarmFingerPrintUUIDv4) getStatement(
+	ctx context.Context, client *spanner.Client, firstName, lastName string,
+) (spanner.Statement, error) {
+	stmt := spanner.Statement{}
+
+	uuid, err := getUUIDv4()
+	if err != nil {
+		return stmt, err
+	}
+
+	stmt = spanner.Statement{
+		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
+					(FARM_FINGERPRINT(@uuid), @firstName, @lastName)`,
+		Params: map[string]interface{}{
+			"uuid":      uuid,
 			"firstName": firstName,
 			"lastName":  lastName,
 		},
