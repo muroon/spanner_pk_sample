@@ -36,7 +36,9 @@ func main() {
 
 	ctx := context.Background()
 
-	fmt.Printf("mode:%s, testMode:%s\n", mode, testMode)
+	fmt.Printf("mode:%s, testMode:%s num:%d, delete:%v\n",
+		mode, testMode, num, delete,
+	)
 
 	if err := spnm.ExecuteInsert(
 		ctx, spn.Mode(mode), spn.TestMode(testMode), num, delete,
