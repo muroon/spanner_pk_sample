@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
-	"os"
 	"time"
 
 	crand "crypto/rand"
@@ -86,8 +85,48 @@ func init() {
 	}
 }
 
+type ISpannerManager interface {
+	ExecuteInsert(
+		ctx context.Context, md Mode, tmd TestMode, num int, delete bool,
+	) error
+}
+
+type spannerManager struct {
+	projectID  string
+	instanceID string
+	databaseID string
+}
+
+func NewSpannerManager(opts ...Option) ISpannerManager {
+	s := new(spannerManager)
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+type Option func(*spannerManager)
+
+func SetProjectID(id string) Option {
+	return func(sm *spannerManager) {
+		sm.projectID = id
+	}
+}
+
+func SetInstanceID(id string) Option {
+	return func(sm *spannerManager) {
+		sm.instanceID = id
+	}
+}
+
+func SetDatabaseID(id string) Option {
+	return func(sm *spannerManager) {
+		sm.databaseID = id
+	}
+}
+
 // ExecuteInsert insert execute
-func ExecuteInsert(
+func (sm *spannerManager) ExecuteInsert(
 	ctx context.Context, md Mode, tmd TestMode, num int, delete bool,
 ) error {
 	if _, ok := modes[md]; !ok {
@@ -95,11 +134,8 @@ func ExecuteInsert(
 	}
 
 	// This database must exist.
-	projectID := os.Getenv("SPN_PROJECT_ID")
-	instanceID := os.Getenv("SPN_INSTANCE_ID")
-	databaseID := os.Getenv("SPN_DATABASE_ID")
 	databaseName := fmt.Sprintf("projects/%s/instances/%s/databases/%s",
-		projectID, instanceID, databaseID,
+		sm.projectID, sm.instanceID, sm.databaseID,
 	)
 	fmt.Println(databaseName)
 
