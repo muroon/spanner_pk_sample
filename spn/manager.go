@@ -25,7 +25,7 @@ const (
 	ModeFarmFingerPrintConcat Mode = "farm_fingerprint_concat"
 
 	// ModeFarmFingerPrintSingleCol farm_fingerprint_single_col
-	ModeFarmFingerPrintSingleCol Mode = "farm_fingerprint_single_col"
+	ModeFarmFingerPrintSingleCol = "farm_fingerprint_single_col"
 
 	// ModeFarmFingerPrintRand farm_fingerprint_rand mode
 	ModeFarmFingerPrintRand = "farm_fingerprint_random"
@@ -85,6 +85,7 @@ func init() {
 	}
 }
 
+// ISpannerManager manager of cloud spanner execute
 type ISpannerManager interface {
 	ExecuteInsert(
 		ctx context.Context, md Mode, tmd TestMode, num int, delete bool,
@@ -95,34 +96,16 @@ type spannerManager struct {
 	projectID  string
 	instanceID string
 	databaseID string
+	client     *spanner.Client
 }
 
+// NewSpannerManager generate manager
 func NewSpannerManager(opts ...Option) ISpannerManager {
 	s := new(spannerManager)
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
-}
-
-type Option func(*spannerManager)
-
-func SetProjectID(id string) Option {
-	return func(sm *spannerManager) {
-		sm.projectID = id
-	}
-}
-
-func SetInstanceID(id string) Option {
-	return func(sm *spannerManager) {
-		sm.instanceID = id
-	}
-}
-
-func SetDatabaseID(id string) Option {
-	return func(sm *spannerManager) {
-		sm.databaseID = id
-	}
 }
 
 // ExecuteInsert insert execute
@@ -139,21 +122,22 @@ func (sm *spannerManager) ExecuteInsert(
 	)
 	fmt.Println(databaseName)
 
-	client, err := spanner.NewClient(ctx, databaseName)
+	var err error
+	sm.client, err = spanner.NewClient(ctx, databaseName)
 	if err != nil {
 		log.Fatalf("Failed to create client %v", err)
 	}
-	defer client.Close()
+	defer sm.client.Close()
 
 	sgr := provideStmtGenerator(md)
 
 	switch tmd {
 	case TestModeSingle:
-		err = testSingle(ctx, client, sgr, num)
+		err = sm.testSingle(ctx, sgr, num)
 	case TestModeBatch:
-		err = testBatch(ctx, client, sgr, num)
+		err = sm.testBatch(ctx, sgr, num)
 	case TestModeBatchOnly:
-		err = testBatchOnly(ctx, client, sgr, num)
+		err = sm.testBatchOnly(ctx, sgr, num)
 	}
 
 	if err != nil {
@@ -161,7 +145,7 @@ func (sm *spannerManager) ExecuteInsert(
 	}
 
 	if delete {
-		_, err = deleteAll(ctx, client)
+		_, err = sm.deleteAll(ctx)
 		if err != nil {
 			return err
 		}
@@ -170,18 +154,18 @@ func (sm *spannerManager) ExecuteInsert(
 	return nil
 }
 
-func testSingle(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+func (sm *spannerManager) testSingle(ctx context.Context, sgr stmtGenerator, num int) error {
 	startTime := time.Now().UnixNano()
 
 	for i := 0; i < num; i++ {
 		incrementNum = int64(i) + 1
 
-		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		stmt, err := sgr.getStatement(ctx, getRandomString(10), getRandomString(10))
 		if err != nil {
 			return err
 		}
 
-		_, err = writeUsingDML(ctx, client, stmt)
+		_, err = sm.writeUsingDML(ctx, stmt)
 
 		if err != nil {
 			return err
@@ -195,7 +179,7 @@ func testSingle(ctx context.Context, client *spanner.Client, sgr stmtGenerator, 
 	return nil
 }
 
-func testBatch(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+func (sm *spannerManager) testBatch(ctx context.Context, sgr stmtGenerator, num int) error {
 	startTime := time.Now().UnixNano()
 
 	stmts := make([]spanner.Statement, 0, num)
@@ -203,7 +187,7 @@ func testBatch(ctx context.Context, client *spanner.Client, sgr stmtGenerator, n
 	for i := 0; i < num; i++ {
 		incrementNum = int64(i) + 1
 
-		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		stmt, err := sgr.getStatement(ctx, getRandomString(10), getRandomString(10))
 		if err != nil {
 			return err
 		}
@@ -211,7 +195,7 @@ func testBatch(ctx context.Context, client *spanner.Client, sgr stmtGenerator, n
 		stmts = append(stmts, stmt)
 	}
 
-	err := writeUsingDMLBatch(ctx, client, stmts)
+	err := sm.writeUsingDMLBatch(ctx, stmts)
 	if err != nil {
 		return err
 	}
@@ -223,14 +207,14 @@ func testBatch(ctx context.Context, client *spanner.Client, sgr stmtGenerator, n
 	return nil
 }
 
-func testBatchOnly(ctx context.Context, client *spanner.Client, sgr stmtGenerator, num int) error {
+func (sm *spannerManager) testBatchOnly(ctx context.Context, sgr stmtGenerator, num int) error {
 
 	stmts := make([]spanner.Statement, 0, num)
 
 	for i := 0; i < num; i++ {
 		incrementNum = int64(i) + 1
 
-		stmt, err := sgr.getStatement(ctx, client, getRandomString(10), getRandomString(10))
+		stmt, err := sgr.getStatement(ctx, getRandomString(10), getRandomString(10))
 		if err != nil {
 			return err
 		}
@@ -240,7 +224,7 @@ func testBatchOnly(ctx context.Context, client *spanner.Client, sgr stmtGenerato
 
 	startTime := time.Now().UnixNano()
 
-	err := writeUsingDMLBatch(ctx, client, stmts)
+	err := sm.writeUsingDMLBatch(ctx, stmts)
 	if err != nil {
 		return err
 	}
@@ -252,9 +236,9 @@ func testBatchOnly(ctx context.Context, client *spanner.Client, sgr stmtGenerato
 	return nil
 }
 
-func writeUsingDML(ctx context.Context, client *spanner.Client, stmt spanner.Statement) (int64, error) {
+func (sm *spannerManager) writeUsingDML(ctx context.Context, stmt spanner.Statement) (int64, error) {
 	var rowCount int64
-	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+	_, err := sm.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		var err error
 
 		rowCount, err = txn.Update(ctx, stmt)
@@ -267,8 +251,8 @@ func writeUsingDML(ctx context.Context, client *spanner.Client, stmt spanner.Sta
 	return rowCount, err
 }
 
-func writeUsingDMLBatch(ctx context.Context, client *spanner.Client, stmts []spanner.Statement) error {
-	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+func (sm *spannerManager) writeUsingDMLBatch(ctx context.Context, stmts []spanner.Statement) error {
+	_, err := sm.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 
 		_, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
@@ -280,12 +264,12 @@ func writeUsingDMLBatch(ctx context.Context, client *spanner.Client, stmts []spa
 	return err
 }
 
-func deleteAll(ctx context.Context, client *spanner.Client) (int64, error) {
+func (sm *spannerManager) deleteAll(ctx context.Context) (int64, error) {
 	stmt := spanner.Statement{
 		SQL: `DELETE FROM Singers WHERE SingerId <> 0`,
 	}
 
-	return writeUsingDML(ctx, client, stmt)
+	return sm.writeUsingDML(ctx, stmt)
 }
 
 func getRandomString(num int) string {

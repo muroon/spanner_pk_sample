@@ -10,7 +10,7 @@ import (
 
 type stmtGenerator interface {
 	getStatement(
-		ctx context.Context, client *spanner.Client, firstName, lastName string,
+		ctx context.Context, firstName, lastName string,
 	) (spanner.Statement, error)
 }
 
@@ -45,7 +45,7 @@ type stmtGeneratorTimestampRandNum2 struct{}
 type stmtGeneratorRandNumTimestamp struct{}
 
 func (cr stmtGeneratorFarmFingerPrintConcat) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	stmt := spanner.Statement{
 		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
@@ -60,7 +60,7 @@ func (cr stmtGeneratorFarmFingerPrintConcat) getStatement(
 }
 
 func (cr stmtGeneratorFarmFingerPrintSingleCol) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	stmt := spanner.Statement{
 		SQL: `INSERT Singers (SingerId, FirstName, LastName) VALUES 
@@ -75,7 +75,7 @@ func (cr stmtGeneratorFarmFingerPrintSingleCol) getStatement(
 }
 
 func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	key := getRandomString(20)
 
@@ -93,7 +93,7 @@ func (cr stmtGeneratorFarmFingerPrintRand) getStatement(
 }
 
 func (cr stmtGeneratorFarmFingerPrintUUIDv4) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	stmt := spanner.Statement{}
 
@@ -116,7 +116,7 @@ func (cr stmtGeneratorFarmFingerPrintUUIDv4) getStatement(
 }
 
 func (cr stmtGeneratorRandNum) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	key := getRandomInt64(0)
 
@@ -134,7 +134,7 @@ func (cr stmtGeneratorRandNum) getStatement(
 }
 
 func (cr stmtGeneratorRandNum2) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	key := getIncrementNum()
 	key = key ^ (key << 13)
@@ -155,7 +155,7 @@ func (cr stmtGeneratorRandNum2) getStatement(
 }
 
 func (cr stmtGeneratorTimestampRandNum) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	tm := time.Now().Unix()
 	tm = tm << 32
@@ -176,7 +176,7 @@ func (cr stmtGeneratorTimestampRandNum) getStatement(
 }
 
 func (cr stmtGeneratorTimestampRandNum2) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	stmt := spanner.Statement{}
 
@@ -203,7 +203,7 @@ func (cr stmtGeneratorTimestampRandNum2) getStatement(
 }
 
 func (cr stmtGeneratorRandNumTimestamp) getStatement(
-	ctx context.Context, client *spanner.Client, firstName, lastName string,
+	ctx context.Context, firstName, lastName string,
 ) (spanner.Statement, error) {
 	tm := time.Now().Unix()
 	num := int64(getRandomUint32()) << 32
