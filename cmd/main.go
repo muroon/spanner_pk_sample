@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"spanner_pk_sample/spn"
+	"github.com/muroon/spanner_pk_sample/spn"
 
 	"github.com/apex/log"
 )
